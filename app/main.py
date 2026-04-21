@@ -2,6 +2,12 @@
 Better Prompt — entry point.
 Run with: streamlit run app/main.py
 """
+import os
+import sys
+
+# Fix module resolution on Streamlit Cloud
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import streamlit as st
 
 

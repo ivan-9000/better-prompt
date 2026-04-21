@@ -1,0 +1,74 @@
+[
+  {
+    "task_name": "Customer Complaint Classifier",
+    "base_prompt": "You are a customer support specialist. Classify the complaint into exactly one of: BILLING, TECHNICAL, GENERAL, REFUND, ACCOUNT. Reply with only the category name in uppercase. No explanation.",
+    "test_cases": [
+      {
+        "input": "I was charged twice for my subscription last month.",
+        "expected_output": "BILLING",
+        "keywords": ["BILLING"]
+      },
+      {
+        "input": "The app keeps crashing when I try to upload a file.",
+        "expected_output": "TECHNICAL",
+        "keywords": ["TECHNICAL"]
+      },
+      {
+        "input": "What are your customer support opening hours?",
+        "expected_output": "GENERAL",
+        "keywords": ["GENERAL"]
+      },
+      {
+        "input": "I cancelled my order two weeks ago and still have not received my refund.",
+        "expected_output": "REFUND",
+        "keywords": ["REFUND"]
+      },
+      {
+        "input": "I cannot log in. The password reset email never arrives.",
+        "expected_output": "ACCOUNT",
+        "keywords": ["ACCOUNT"]
+      }
+    ]
+  },
+  {
+    "task_name": "Python Docstring Generator",
+    "base_prompt": "You are a Python documentation expert. Generate a Google-style docstring for the given Python function. Include Args and Returns sections. Return only the docstring, no other text.",
+    "test_cases": [
+      {
+        "input": "def add(a: int, b: int) -> int:\n    return a + b",
+        "expected_output": "",
+        "keywords": ["Args:", "Returns:"]
+      },
+      {
+        "input": "def greet(name: str) -> str:\n    return f'Hello, {name}!'",
+        "expected_output": "",
+        "keywords": ["Args:", "Returns:"]
+      },
+      {
+        "input": "def divide(a: float, b: float) -> float:\n    if b == 0:\n        raise ValueError('Cannot divide by zero')\n    return a / b",
+        "expected_output": "",
+        "keywords": ["Args:", "Returns:", "Raises:"]
+      }
+    ]
+  },
+  {
+    "task_name": "JSON Data Extractor",
+    "base_prompt": "Extract the name, email, and phone number from the text. Return a valid JSON object with exactly these keys: name, email, phone. If a field is not found, set its value to null. Return ONLY the JSON object, no extra text.",
+    "test_cases": [
+      {
+        "input": "Hi, I am Ivan Pavlovic. You can reach me at ivan@example.com or call +421 900 123 456.",
+        "expected_output": "{\"name\": \"Ivan Pavlovic\", \"email\": \"ivan@example.com\", \"phone\": \"+421 900 123 456\"}",
+        "keywords": ["name", "email", "phone"]
+      },
+      {
+        "input": "Contact Sarah Johnson at sarah.j@company.org for more details.",
+        "expected_output": "{\"name\": \"Sarah Johnson\", \"email\": \"sarah.j@company.org\", \"phone\": null}",
+        "keywords": ["name", "email", "phone"]
+      },
+      {
+        "input": "Please call us on 0800-555-1234. No email provided.",
+        "expected_output": "{\"name\": null, \"email\": null, \"phone\": \"0800-555-1234\"}",
+        "keywords": ["name", "email", "phone"]
+      },
+      {
+        "input": "Send your CV to hr@techcorp.io

@@ -51,7 +51,7 @@ def main() -> None:
         )
 
         st.divider()
-        st.caption("v0.1.0 · MIT License")
+        st.caption("v0.2.0 · MIT License")
 
     if page == "✨ Enhance":
         from app.ui.pages.enhance import render

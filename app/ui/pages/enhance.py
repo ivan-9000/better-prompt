@@ -60,6 +60,8 @@ def render() -> None:
         st.session_state["last_variants"] = []
     if "last_question" not in st.session_state:
         st.session_state["last_question"] = ""
+    if "last_language" not in st.session_state:
+        st.session_state["last_language"] = "English"
 
     # ── Sidebar ───────────────────────────────────────────────────────────────
     with st.sidebar:
@@ -160,31 +162,74 @@ def render() -> None:
                     "**Groq model** at https://console.groq.com."
                 )
             else:
-                with st.spinner("🔮  Crafting your 5 enhanced prompt variants…"):
-                    try:
-                        generator = PromptGenerator(
-                            model=model,
-                            api_key=api_key if api_key else None,
-                        )
-                        variants = generator.enhance_prompt(
-                            user_question=user_question.strip(),
-                            context=context,
-                            goal=goal,
-                        )
-                        # ✅ Save to session state so they survive reruns
-                        st.session_state["last_variants"] = variants
-                        st.session_state["last_question"]  = user_question.strip()
-                        st.session_state["session_count"] += 1
-                        st.session_state["copied_index"]   = None
+                try:
+                    generator = PromptGenerator(
+                        model=model,
+                        api_key=api_key if api_key else None,
+                    )
 
-                    except Exception as exc:
-                        st.error(f"❌  Something went wrong: {exc}")
-                        st.info(
-                            "💡  **Suggestions:**\n"
-                            "- Switch to **groq/llama-3.1-8b-instant**\n"
-                            "- Check that your API key is correct\n"
-                            "- Try a shorter or simpler question"
+                    with st.status(
+                        "✨  Working on your prompt…",
+                        expanded=True,
+                    ) as status:
+
+                        # Step 1 — detect language
+                        st.write("🔍  Detecting your language…")
+                        language = generator.detect_language(
+                            user_question.strip()
                         )
+                        st.write(f"✅  Language detected: **{language}**")
+
+                        # Step 2 — generate variants
+                        st.write(
+                            "🔮  Crafting your 5 enhanced prompt variants…"
+                        )
+                        meta     = generator._build_meta_prompt(
+                            user_question.strip(), context, goal
+                        )
+                        variants = generator._call_llm_for_variants(meta)
+                        st.write(
+                            f"✅  {len(variants)} variants crafted"
+                        )
+
+                        # Step 3 — translate if needed
+                        if language.lower() != "english":
+                            st.write(
+                                f"🌐  Translating into {language}…"
+                            )
+                            variants = generator.translate_variants(
+                                variants, language
+                            )
+                            st.write(
+                                f"✅  Translation complete"
+                            )
+                        else:
+                            st.write(
+                                "🌐  Output language: English — "
+                                "no translation needed"
+                            )
+
+                        status.update(
+                            label="✅  Your prompts are ready!",
+                            state="complete",
+                            expanded=False,
+                        )
+
+                    # Save to session state
+                    st.session_state["last_variants"] = variants
+                    st.session_state["last_question"]  = user_question.strip()
+                    st.session_state["last_language"]  = language
+                    st.session_state["session_count"] += 1
+                    st.session_state["copied_index"]   = None
+
+                except Exception as exc:
+                    st.error(f"❌  Something went wrong: {exc}")
+                    st.info(
+                        "💡  **Suggestions:**\n"
+                        "- Switch to **groq/llama-3.1-8b-instant**\n"
+                        "- Check that your API key is correct\n"
+                        "- Try a shorter or simpler question"
+                    )
 
     # ── Show placeholder if no variants yet ───────────────────────────────────
     if not st.session_state["last_variants"]:
@@ -199,10 +244,33 @@ def render() -> None:
         return
 
     # ── Results header ────────────────────────────────────────────────────────
-    st.success(
-        f"✅  Done! Generated "
-        f"{len(st.session_state['last_variants'])} enhanced variants."
-    )
+    language = st.session_state.get("last_language", "English")
+
+    col_result, col_lang = st.columns([5, 1])
+    with col_result:
+        st.success(
+            f"✅  Done! Generated "
+            f"{len(st.session_state['last_variants'])} enhanced variants."
+        )
+    with col_lang:
+        st.markdown(
+            "<br>",
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            f"<span style='"
+            f"background:#EDE9FE;"
+            f"color:#5B21B6;"
+            f"padding:6px 14px;"
+            f"border-radius:12px;"
+            f"font-size:0.85em;"
+            f"font-weight:600;"
+            f"'>"
+            f"🌐 {language}"
+            f"</span>",
+            unsafe_allow_html=True,
+        )
+
     st.markdown(
         f"**Your original question:** "
         f"*{st.session_state['last_question']}*"

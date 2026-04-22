@@ -1,6 +1,6 @@
 """
 Better Prompt — generator engine.
-Handles prompt enhancement and classical variant generation.
+Handles prompt enhancement, language detection, and translation.
 """
 from __future__ import annotations
 
@@ -23,14 +23,15 @@ class PromptGenerator:
         self.model = model
         self.api_key = api_key
 
-    def enhance_prompt(
-        self,
-        user_question: str,
-        context: str = "",
-        goal: str = "",
-    ) -> list:
-        """Return 5 enhanced prompt variants for a rough user question."""
-        meta = self._build_meta_prompt(user_question, context, goal)
+    # ── Public: detect language ───────────────────────────────────────────────
+    def detect_language(self, text: str) -> str:
+        """
+        Detect the language of the input text.
+
+        Returns a plain English language name e.g.
+        "Slovak", "Czech", "German", "English", "French".
+        Falls back to "English" if detection fails.
+        """
         try:
             extra = {"api_key": self.api_key} if self.api_key else {}
             r = litellm.completion(
@@ -39,31 +40,136 @@ class PromptGenerator:
                     {
                         "role": "system",
                         "content": (
-                            "You are a world-class prompt engineer. "
-                            "Transform rough questions into precise, detailed, "
-                            "highly effective prompts. "
-                            "Always return valid JSON only. "
-                            "No text outside the JSON array."
+                            "You are a language detection expert. "
+                            "Identify the language of the given text. "
+                            "Reply with ONLY the language name in English. "
+                            "Examples: English, Slovak, Czech, German, "
+                            "French, Spanish, Polish, Hungarian. "
+                            "One word only. No punctuation."
                         ),
                     },
-                    {"role": "user", "content": meta},
+                    {
+                        "role": "user",
+                        "content": text,
+                    },
                 ],
-                temperature=0.8,
-                max_tokens=2000,
+                temperature=0.0,
+                max_tokens=10,
                 **extra,
             )
-            raw = r.choices[0].message.content or ""
-            variants = self._parse_variants(raw)
-            if variants:
-                logger.info(
-                    f"[generator] enhance_prompt → {len(variants)} variants"
-                )
-                return variants
-            logger.warning("[generator] 0 variants parsed — using fallback")
+            language = r.choices[0].message.content.strip()
+            logger.info(f"[generator] detected language: {language}")
+            return language
         except Exception as e:
-            logger.warning(f"[generator] LLM call failed: {e}")
-        return self._fallback_variants(user_question)
+            logger.warning(f"[generator] language detection failed: {e}")
+            return "English"
 
+    # ── Public: translate variants ────────────────────────────────────────────
+    def translate_variants(
+        self,
+        variants: list,
+        target_language: str,
+    ) -> list:
+        """
+        Translate the enhanced_prompt field of each variant
+        into the target language.
+
+        All other fields (variant_name, why_better, best_for, tone)
+        are also translated so the full card is in the user's language.
+
+        Skips translation if target_language is English.
+        """
+        if target_language.lower() == "english":
+            return variants
+
+        translated = []
+        for variant in variants:
+            try:
+                extra = {"api_key": self.api_key} if self.api_key else {}
+
+                original = json.dumps(variant, ensure_ascii=False)
+
+                r = litellm.completion(
+                    model=self.model,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                f"You are a professional translator. "
+                                f"Translate all text values in the given "
+                                f"JSON object into {target_language}. "
+                                f"Keep all JSON keys in English exactly "
+                                f"as they are. "
+                                f"Translate only the values. "
+                                f"Return ONLY valid JSON. No extra text."
+                            ),
+                        },
+                        {
+                            "role": "user",
+                            "content": original,
+                        },
+                    ],
+                    temperature=0.3,
+                    max_tokens=800,
+                    **extra,
+                )
+
+                raw = r.choices[0].message.content or ""
+                parsed = self._parse_single_variant(raw)
+
+                if parsed:
+                    translated.append(parsed)
+                    logger.info(
+                        f"[generator] translated variant "
+                        f"'{variant.get('variant_name')}' "
+                        f"to {target_language}"
+                    )
+                else:
+                    logger.warning(
+                        f"[generator] translation parse failed "
+                        f"for '{variant.get('variant_name')}' "
+                        f"— keeping original"
+                    )
+                    translated.append(variant)
+
+            except Exception as e:
+                logger.warning(
+                    f"[generator] translation failed for "
+                    f"'{variant.get('variant_name')}': {e} "
+                    f"— keeping original"
+                )
+                translated.append(variant)
+
+        return translated
+
+    # ── Public: enhance prompt ────────────────────────────────────────────────
+    def enhance_prompt(
+        self,
+        user_question: str,
+        context: str = "",
+        goal: str = "",
+    ) -> list:
+        """
+        Main entry point.
+
+        1. Detect the language of the user question
+        2. Generate 5 variants (always in English for best quality)
+        3. Translate all variants back to the user's language
+        4. Return the translated variants
+        """
+        # Step 1 — detect language
+        language = self.detect_language(user_question)
+
+        # Step 2 — generate variants in English
+        meta = self._build_meta_prompt(user_question, context, goal)
+        variants = self._call_llm_for_variants(meta)
+
+        # Step 3 — translate back to user language
+        variants = self.translate_variants(variants, language)
+
+        return variants
+
+    # ── Public: generate classical technique variants ─────────────────────────
     def generate_variants(
         self,
         task_description: str,
@@ -93,6 +199,7 @@ class PromptGenerator:
             ),
         }
 
+    # ── Public: meta prompt suggestion ───────────────────────────────────────
     def generate_meta_prompt(self, task_description: str) -> str:
         """Ask the LLM to write an optimised system prompt for a task."""
         try:
@@ -124,6 +231,43 @@ class PromptGenerator:
                 f"You are a helpful expert assistant for: {task_description}"
             )
 
+    # ── Private: call LLM for variants ────────────────────────────────────────
+    def _call_llm_for_variants(self, meta: str) -> list:
+        """Call the LLM and return parsed variants or fallback."""
+        try:
+            extra = {"api_key": self.api_key} if self.api_key else {}
+            r = litellm.completion(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a world-class prompt engineer. "
+                            "Transform rough questions into precise, "
+                            "detailed, highly effective prompts. "
+                            "Always return valid JSON only. "
+                            "No text outside the JSON array."
+                        ),
+                    },
+                    {"role": "user", "content": meta},
+                ],
+                temperature=0.8,
+                max_tokens=2000,
+                **extra,
+            )
+            raw = r.choices[0].message.content or ""
+            variants = self._parse_variants(raw)
+            if variants:
+                logger.info(
+                    f"[generator] {len(variants)} variants generated"
+                )
+                return variants
+            logger.warning("[generator] 0 variants parsed — using fallback")
+        except Exception as e:
+            logger.warning(f"[generator] LLM call failed: {e}")
+        return self._fallback_variants("")
+
+    # ── Private: build meta prompt ────────────────────────────────────────────
     def _build_meta_prompt(
         self, question: str, context: str, goal: str
     ) -> str:
@@ -141,11 +285,11 @@ Your task: generate exactly 5 enhanced versions of this question.
 Each version must target a different angle, audience, or depth level.
 
 Cover exactly these 5 angles in this order:
-1. Beginner Friendly       — plain language, no assumed knowledge, analogies welcome
-2. Technical Deep-Dive     — precise, detailed, assumes professional experience
-3. Step-by-Step Practical  — action-oriented, numbered steps, tools listed
-4. Conceptual Understanding — focus on WHY not HOW, build mental models
-5. Expert Comparison       — compare options, weigh tradeoffs, end with recommendation
+1. Beginner Friendly       — plain language, no assumed knowledge
+2. Technical Deep-Dive     — precise, detailed, professional level
+3. Step-by-Step Practical  — action-oriented, numbered steps, tools
+4. Conceptual Understanding — focus on WHY not HOW, mental models
+5. Expert Comparison       — compare options, tradeoffs, recommendation
 
 Return ONLY a valid JSON array with exactly 5 objects.
 Each object must have these exact keys:
@@ -157,6 +301,7 @@ Each object must have these exact keys:
 
 No intro text. No markdown fences. JSON array only."""
 
+    # ── Private: parse variants array ─────────────────────────────────────────
     def _parse_variants(self, raw: str) -> list:
         """Try 3 strategies to extract a JSON array from LLM output."""
         try:
@@ -183,9 +328,37 @@ No intro text. No markdown fences. JSON array only."""
                 pass
         return []
 
+    # ── Private: parse single variant object ──────────────────────────────────
+    def _parse_single_variant(self, raw: str) -> Optional[dict]:
+        """Extract a single JSON object from LLM translation output."""
+        try:
+            d = json.loads(raw.strip())
+            if isinstance(d, dict):
+                return d
+        except json.JSONDecodeError:
+            pass
+        m = re.search(r"```(?:json)?\s*([\s\S]*?)```", raw)
+        if m:
+            try:
+                d = json.loads(m.group(1).strip())
+                if isinstance(d, dict):
+                    return d
+            except json.JSONDecodeError:
+                pass
+        m = re.search(r"(\{[\s\S]*\})", raw)
+        if m:
+            try:
+                d = json.loads(m.group(1))
+                if isinstance(d, dict):
+                    return d
+            except json.JSONDecodeError:
+                pass
+        return None
+
+    # ── Private: fallback variants ────────────────────────────────────────────
     def _fallback_variants(self, question: str) -> list:
         """Return 5 template-based variants when the LLM is unavailable."""
-        q = question.strip()
+        q = question.strip() if question.strip() else "this topic"
         return [
             {
                 "variant_name": "Beginner Friendly",
@@ -201,9 +374,7 @@ No intro text. No markdown fences. JSON array only."""
                     "Removes assumed knowledge and explicitly requests "
                     "plain language and analogies."
                 ),
-                "best_for": (
-                    "Absolute beginners with no background in the subject."
-                ),
+                "best_for": "Absolute beginners with no background.",
                 "tone": "Conversational",
             },
             {
@@ -213,82 +384,65 @@ No intro text. No markdown fences. JSON array only."""
                     f"Cover the underlying mechanisms, architecture, and core "
                     f"principles. Include best practices, edge cases, "
                     f"performance considerations, and current industry "
-                    f"standards. Assume I have professional experience and "
-                    f"can handle full technical depth."
+                    f"standards. Assume I have professional experience."
                 ),
                 "why_better": (
-                    "Signals expertise level and requests the depth a "
-                    "professional actually needs."
+                    "Signals expertise level and requests the depth "
+                    "a professional actually needs."
                 ),
-                "best_for": (
-                    "Experienced practitioners seeking rigorous, "
-                    "complete knowledge."
-                ),
+                "best_for": "Experienced practitioners seeking complete knowledge.",
                 "tone": "Technical",
             },
             {
                 "variant_name": "Step-by-Step Practical",
                 "enhanced_prompt": (
                     f"Give me a clear, actionable, numbered step-by-step "
-                    f"guide on {q}. For each step, tell me exactly what to "
-                    f"do, what tools or resources I need, and what the "
-                    f"expected result looks like. Also highlight the most "
-                    f"common mistakes to avoid at each stage. I want to be "
-                    f"able to start immediately after reading this."
+                    f"guide on {q}. For each step tell me exactly what to do, "
+                    f"what tools I need, and the expected result. "
+                    f"Highlight the most common mistakes to avoid. "
+                    f"I want to start immediately after reading this."
                 ),
                 "why_better": (
                     "Turns abstract knowledge into concrete actions "
                     "with tools and success criteria."
                 ),
-                "best_for": (
-                    "People who learn by doing and want "
-                    "immediate, practical results."
-                ),
+                "best_for": "People who learn by doing.",
                 "tone": "Structured",
             },
             {
                 "variant_name": "Conceptual Understanding",
                 "enhanced_prompt": (
-                    f"Help me build a deep, lasting conceptual understanding "
-                    f"of {q}. Do not just tell me what it is — explain WHY "
-                    f"it works this way, WHY it matters, and how it connects "
-                    f"to related concepts I may already know. Use mental "
-                    f"models, analogies, and real-world examples to make it "
-                    f"intuitive. I want to truly understand this, not just "
-                    f"memorise facts."
+                    f"Help me build a deep conceptual understanding of {q}. "
+                    f"Explain WHY it works this way, WHY it matters, and how "
+                    f"it connects to related concepts I may already know. "
+                    f"Use mental models and analogies. I want to truly "
+                    f"understand this, not just memorise facts."
                 ),
                 "why_better": (
                     "Prioritises genuine understanding and transferable "
                     "mental models over surface facts."
                 ),
-                "best_for": (
-                    "Curious learners who want knowledge that sticks "
-                    "and applies to new situations."
-                ),
+                "best_for": "Curious learners who want lasting knowledge.",
                 "tone": "Analytical",
             },
             {
                 "variant_name": "Expert Comparison",
                 "enhanced_prompt": (
-                    f"Compare all major approaches, tools, frameworks, or "
-                    f"options related to {q}. For each option cover: what it "
-                    f"is, when to use it, key strengths, key limitations, and "
-                    f"who it suits best. Present a structured comparison, "
-                    f"then end with a clear opinionated recommendation for "
-                    f"the most common scenarios."
+                    f"Compare all major approaches, tools, or options "
+                    f"related to {q}. For each option cover: what it is, "
+                    f"when to use it, key strengths, key limitations, "
+                    f"and who it suits best. End with a clear recommendation "
+                    f"for the most common scenarios."
                 ),
                 "why_better": (
-                    "Enables informed decision-making by mapping all "
-                    "options with honest tradeoffs."
+                    "Enables informed decision-making with honest tradeoffs."
                 ),
-                "best_for": (
-                    "Anyone who needs to choose between tools or "
-                    "approaches and wants a recommendation."
-                ),
+                "best_for": "Anyone choosing between options.",
                 "tone": "Comparative",
             },
         ]
 
+    # ── Private: few shot examples ────────────────────────────────────────────
     def _few_shot_examples(self, task: str, base: str) -> str:
         """Generate 2 input/output examples for few-shot prompting."""
         try:

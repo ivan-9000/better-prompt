@@ -16,7 +16,7 @@ CARD_EMOJIS = ["🟢", "🔵", "🟡", "🟠", "🔴"]
 
 def render() -> None:
 
-    # ── Global font size + Ctrl+Enter support ────────────────────────────────
+    # ── Global CSS ────────────────────────────────────────────────────────────
     st.markdown(
         """
         <style>
@@ -56,10 +56,12 @@ def render() -> None:
         st.session_state["session_count"] = 0
     if "copied_index" not in st.session_state:
         st.session_state["copied_index"] = None
-    if "enhance_trigger" not in st.session_state:
-        st.session_state["enhance_trigger"] = False
+    if "last_variants" not in st.session_state:
+        st.session_state["last_variants"] = []
+    if "last_question" not in st.session_state:
+        st.session_state["last_question"] = ""
 
-    # ── Sidebar extras ────────────────────────────────────────────────────────
+    # ── Sidebar ───────────────────────────────────────────────────────────────
     with st.sidebar:
         st.divider()
         st.subheader("💡 Tips")
@@ -135,10 +137,60 @@ def render() -> None:
         use_container_width=True,
     )
 
-    if not enhance_clicked:
+    # ── Handle enhance click ──────────────────────────────────────────────────
+    if enhance_clicked:
+
+        if not user_question.strip():
+            st.warning("⚠️  Please enter a question or topic before enhancing.")
+
+        else:
+            api_key = st.session_state.get("global_api_key", "")
+            model   = st.session_state.get(
+                "global_model", "groq/llama-3.3-70b-versatile"
+            )
+            groq_models = {
+                "groq/llama-3.3-70b-versatile",
+                "groq/llama-3.1-8b-instant",
+            }
+
+            if not api_key and model not in groq_models:
+                st.warning(
+                    f"⚠️  **{model}** requires an API key. "
+                    "Please add your key in the sidebar, or switch to a free "
+                    "**Groq model** at https://console.groq.com."
+                )
+            else:
+                with st.spinner("🔮  Crafting your 5 enhanced prompt variants…"):
+                    try:
+                        generator = PromptGenerator(
+                            model=model,
+                            api_key=api_key if api_key else None,
+                        )
+                        variants = generator.enhance_prompt(
+                            user_question=user_question.strip(),
+                            context=context,
+                            goal=goal,
+                        )
+                        # ✅ Save to session state so they survive reruns
+                        st.session_state["last_variants"] = variants
+                        st.session_state["last_question"]  = user_question.strip()
+                        st.session_state["session_count"] += 1
+                        st.session_state["copied_index"]   = None
+
+                    except Exception as exc:
+                        st.error(f"❌  Something went wrong: {exc}")
+                        st.info(
+                            "💡  **Suggestions:**\n"
+                            "- Switch to **groq/llama-3.1-8b-instant**\n"
+                            "- Check that your API key is correct\n"
+                            "- Try a shorter or simpler question"
+                        )
+
+    # ── Show placeholder if no variants yet ───────────────────────────────────
+    if not st.session_state["last_variants"]:
         st.markdown(
             "<br>"
-            "<p style='text-align:center; color:#888; font-size:1.05em;'>"
+            "<p style='text-align:center;color:#888;font-size:1.05em;'>"
             "👆  Enter your question above and click "
             "<b>Enhance My Prompt</b>"
             "</p>",
@@ -146,59 +198,14 @@ def render() -> None:
         )
         return
 
-    # ── Validation ────────────────────────────────────────────────────────────
-    if not user_question.strip():
-        st.warning("⚠️  Please enter a question or topic before enhancing.")
-        return
-
-    # ── Read API settings ─────────────────────────────────────────────────────
-    api_key = st.session_state.get("global_api_key", "")
-    model   = st.session_state.get(
-        "global_model", "groq/llama-3.3-70b-versatile"
-    )
-    groq_models = {
-        "groq/llama-3.3-70b-versatile",
-        "groq/llama-3.1-8b-instant",
-    }
-
-    if not api_key and model not in groq_models:
-        st.warning(
-            f"⚠️  **{model}** requires an API key. "
-            "Please add your key in the sidebar, or switch to a free "
-            "**Groq model** at https://console.groq.com."
-        )
-        return
-
-    # ── Generate variants ─────────────────────────────────────────────────────
-    with st.spinner("🔮  Crafting your 5 enhanced prompt variants…"):
-        try:
-            generator = PromptGenerator(
-                model=model,
-                api_key=api_key if api_key else None,
-            )
-            variants = generator.enhance_prompt(
-                user_question=user_question.strip(),
-                context=context,
-                goal=goal,
-            )
-        except Exception as exc:
-            st.error(f"❌  Something went wrong: {exc}")
-            st.info(
-                "💡  **Suggestions:**\n"
-                "- Switch to **groq/llama-3.1-8b-instant** in the sidebar\n"
-                "- Check that your API key is correct\n"
-                "- Try a shorter or simpler question"
-            )
-            return
-
-    # ── Update session state ──────────────────────────────────────────────────
-    st.session_state["session_count"] += 1
-    st.session_state["copied_index"]   = None
-
     # ── Results header ────────────────────────────────────────────────────────
-    st.success(f"✅  Done! Generated {len(variants)} enhanced variants.")
+    st.success(
+        f"✅  Done! Generated "
+        f"{len(st.session_state['last_variants'])} enhanced variants."
+    )
     st.markdown(
-        f"**Your original question:** *{user_question.strip()}*"
+        f"**Your original question:** "
+        f"*{st.session_state['last_question']}*"
     )
     st.divider()
     st.subheader("Your 5 Enhanced Prompt Variants")
@@ -210,7 +217,7 @@ def render() -> None:
     st.markdown("<br>", unsafe_allow_html=True)
 
     # ── Variant cards ─────────────────────────────────────────────────────────
-    for i, variant in enumerate(variants):
+    for i, variant in enumerate(st.session_state["last_variants"]):
         emoji      = CARD_EMOJIS[i % len(CARD_EMOJIS)]
         name       = variant.get("variant_name",    f"Variant {i + 1}")
         prompt     = variant.get("enhanced_prompt", "")
@@ -286,7 +293,8 @@ def render() -> None:
                 "padding:16px 20px;"
                 "margin-top:8px;"
                 "'>"
-                "<p style='margin:0 0 8px 0;font-weight:700;color:#166534;'>"
+                "<p style='margin:0 0 8px 0;"
+                "font-weight:700;color:#166534;'>"
                 "📋 How to copy this prompt</p>"
                 "<ol style='margin:0;padding-left:20px;"
                 "color:#166534;line-height:1.8;'>"
@@ -295,7 +303,8 @@ def render() -> None:
                 "<li>Press <strong>Ctrl+C</strong> to copy</li>"
                 "<li>Paste anywhere with <strong>Ctrl+V</strong></li>"
                 "</ol>"
-                "<p style='margin:8px 0 0 0;font-size:0.82em;color:#16A34A;'>"
+                "<p style='margin:8px 0 0 0;"
+                "font-size:0.82em;color:#16A34A;'>"
                 "💡 On Mac use Cmd instead of Ctrl</p>"
                 "</div>",
                 unsafe_allow_html=True,

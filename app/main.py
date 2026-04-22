@@ -16,7 +16,7 @@ def main() -> None:
         page_title="Better Prompt",
         page_icon="✨",
         layout="wide",
-        initial_sidebar_state="expanded",
+        initial_sidebar_state="collapsed",
     )
 
     with st.sidebar:

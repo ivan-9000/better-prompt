@@ -16,6 +16,32 @@ CARD_EMOJIS = ["🟢", "🔵", "🟡", "🟠", "🔴"]
 
 def render() -> None:
 
+    # ── Global CSS ────────────────────────────────────────────────────────────
+    st.markdown(
+        """
+        <style>
+        .main p, .main li, .main label {
+            font-size: 1.05rem;
+            line-height: 1.7;
+        }
+        .main h3 {
+            font-size: 1.1rem;
+            margin-bottom: 4px;
+        }
+        [data-testid="stSidebar"] p,
+        [data-testid="stSidebar"] label {
+            font-size: 0.95rem;
+        }
+        @media (max-width: 768px) {
+            .main p, .main li {
+                font-size: 1rem;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
     # ── Page header ───────────────────────────────────────────────────────────
     st.title("✨ Better Prompt")
     st.markdown(
@@ -30,8 +56,12 @@ def render() -> None:
         st.session_state["session_count"] = 0
     if "copied_index" not in st.session_state:
         st.session_state["copied_index"] = None
+    if "last_variants" not in st.session_state:
+        st.session_state["last_variants"] = []
+    if "last_question" not in st.session_state:
+        st.session_state["last_question"] = ""
 
-    # ── Sidebar extras ────────────────────────────────────────────────────────
+    # ── Sidebar ───────────────────────────────────────────────────────────────
     with st.sidebar:
         st.divider()
         st.subheader("💡 Tips")
@@ -60,6 +90,7 @@ def render() -> None:
             "·  help me write an email to my boss  ·  what is blockchain  "
             "·  how does the stock market work"
         ),
+        key="main_question",
     )
 
     # ── Optional context and goal ─────────────────────────────────────────────
@@ -106,10 +137,60 @@ def render() -> None:
         use_container_width=True,
     )
 
-    if not enhance_clicked:
+    # ── Handle enhance click ──────────────────────────────────────────────────
+    if enhance_clicked:
+
+        if not user_question.strip():
+            st.warning("⚠️  Please enter a question or topic before enhancing.")
+
+        else:
+            api_key = st.session_state.get("global_api_key", "")
+            model   = st.session_state.get(
+                "global_model", "groq/llama-3.3-70b-versatile"
+            )
+            groq_models = {
+                "groq/llama-3.3-70b-versatile",
+                "groq/llama-3.1-8b-instant",
+            }
+
+            if not api_key and model not in groq_models:
+                st.warning(
+                    f"⚠️  **{model}** requires an API key. "
+                    "Please add your key in the sidebar, or switch to a free "
+                    "**Groq model** at https://console.groq.com."
+                )
+            else:
+                with st.spinner("🔮  Crafting your 5 enhanced prompt variants…"):
+                    try:
+                        generator = PromptGenerator(
+                            model=model,
+                            api_key=api_key if api_key else None,
+                        )
+                        variants = generator.enhance_prompt(
+                            user_question=user_question.strip(),
+                            context=context,
+                            goal=goal,
+                        )
+                        # ✅ Save to session state so they survive reruns
+                        st.session_state["last_variants"] = variants
+                        st.session_state["last_question"]  = user_question.strip()
+                        st.session_state["session_count"] += 1
+                        st.session_state["copied_index"]   = None
+
+                    except Exception as exc:
+                        st.error(f"❌  Something went wrong: {exc}")
+                        st.info(
+                            "💡  **Suggestions:**\n"
+                            "- Switch to **groq/llama-3.1-8b-instant**\n"
+                            "- Check that your API key is correct\n"
+                            "- Try a shorter or simpler question"
+                        )
+
+    # ── Show placeholder if no variants yet ───────────────────────────────────
+    if not st.session_state["last_variants"]:
         st.markdown(
             "<br>"
-            "<p style='text-align:center; color:#888; font-size:1.05em;'>"
+            "<p style='text-align:center;color:#888;font-size:1.05em;'>"
             "👆  Enter your question above and click "
             "<b>Enhance My Prompt</b>"
             "</p>",
@@ -117,59 +198,14 @@ def render() -> None:
         )
         return
 
-    # ── Validation ────────────────────────────────────────────────────────────
-    if not user_question.strip():
-        st.warning("⚠️  Please enter a question or topic before enhancing.")
-        return
-
-    # ── Read API settings from shared session state ───────────────────────────
-    api_key = st.session_state.get("global_api_key", "")
-    model   = st.session_state.get(
-        "global_model", "groq/llama-3.3-70b-versatile"
-    )
-    groq_models = {
-        "groq/llama-3.3-70b-versatile",
-        "groq/llama-3.1-8b-instant",
-    }
-
-    if not api_key and model not in groq_models:
-        st.warning(
-            f"⚠️  **{model}** requires an API key. "
-            "Please add your key in the sidebar, or switch to a free "
-            "**Groq model** at https://console.groq.com."
-        )
-        return
-
-    # ── Generate variants ─────────────────────────────────────────────────────
-    with st.spinner("🔮  Crafting your 5 enhanced prompt variants…"):
-        try:
-            generator = PromptGenerator(
-                model=model,
-                api_key=api_key if api_key else None,
-            )
-            variants = generator.enhance_prompt(
-                user_question=user_question.strip(),
-                context=context,
-                goal=goal,
-            )
-        except Exception as exc:
-            st.error(f"❌  Something went wrong: {exc}")
-            st.info(
-                "💡  **Suggestions:**\n"
-                "- Switch to **groq/llama-3.1-8b-instant** in the sidebar\n"
-                "- Check that your API key is correct\n"
-                "- Try a shorter or simpler question"
-            )
-            return
-
-    # ── Update session state ──────────────────────────────────────────────────
-    st.session_state["session_count"] += 1
-    st.session_state["copied_index"]   = None
-
     # ── Results header ────────────────────────────────────────────────────────
-    st.success(f"✅  Done! Generated {len(variants)} enhanced variants.")
+    st.success(
+        f"✅  Done! Generated "
+        f"{len(st.session_state['last_variants'])} enhanced variants."
+    )
     st.markdown(
-        f"**Your original question:** *{user_question.strip()}*"
+        f"**Your original question:** "
+        f"*{st.session_state['last_question']}*"
     )
     st.divider()
     st.subheader("Your 5 Enhanced Prompt Variants")
@@ -181,7 +217,7 @@ def render() -> None:
     st.markdown("<br>", unsafe_allow_html=True)
 
     # ── Variant cards ─────────────────────────────────────────────────────────
-    for i, variant in enumerate(variants):
+    for i, variant in enumerate(st.session_state["last_variants"]):
         emoji      = CARD_EMOJIS[i % len(CARD_EMOJIS)]
         name       = variant.get("variant_name",    f"Variant {i + 1}")
         prompt     = variant.get("enhanced_prompt", "")
@@ -193,68 +229,93 @@ def render() -> None:
         chatgpt_url = f"https://chatgpt.com/?q={encoded}"
         claude_url  = f"https://claude.ai/new?q={encoded}"
 
-        with st.container(border=True):
+        # ── Card ──────────────────────────────────────────────────────────
+        st.markdown(
+            f"<div style='"
+            f"background:#F5F3FF;"
+            f"border-radius:12px;"
+            f"padding:24px 24px 8px 24px;"
+            f"margin-bottom:16px;"
+            f"'>"
+            f"<div style='display:flex;justify-content:space-between;"
+            f"align-items:center;margin-bottom:4px;'>"
+            f"<span style='font-size:1.2em;font-weight:700;'>"
+            f"{emoji}&nbsp;&nbsp;{name}</span>"
+            f"<span style='background:#EDE9FE;color:#5B21B6;"
+            f"padding:4px 12px;border-radius:12px;"
+            f"font-size:0.78em;font-weight:600;'>{tone}</span>"
+            f"</div>"
+            f"<p style='margin:6px 0 2px 0;font-size:0.95em;'>"
+            f"<strong>Best for:</strong> {best_for}</p>"
+            f"<p style='margin:2px 0 12px 0;font-size:0.9em;"
+            f"font-style:italic;color:#555;'>{why_better}</p>"
+            f"<div style='background:#FFFFFF;border-radius:8px;"
+            f"padding:16px;font-family:monospace;font-size:0.9em;"
+            f"line-height:1.6;white-space:pre-wrap;"
+            f"word-wrap:break-word;color:#1F1F1F;"
+            f"margin-bottom:16px;'>{prompt}</div>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
 
-            # Title row
-            col_title, col_tone = st.columns([4, 1])
-            with col_title:
-                st.subheader(f"{emoji}  {name}")
-            with col_tone:
-                st.markdown(
-                    "<br>"
-                    f"<span style='"
-                    f"background:#f0f2f6;"
-                    f"padding:5px 12px;"
-                    f"border-radius:14px;"
-                    f"font-size:0.78em;"
-                    f"color:#444;"
-                    f"'>{tone}</span>",
-                    unsafe_allow_html=True,
-                )
+        # ── Action buttons ────────────────────────────────────────────────
+        btn_copy, btn_gpt, btn_claude = st.columns(3)
 
-            # Meta info
-            st.markdown(f"**Best for:** {best_for}")
-            st.markdown(f"*{why_better}*")
-            st.markdown("<br>", unsafe_allow_html=True)
+        with btn_copy:
+            if st.button(
+                "📋  Copy prompt",
+                key=f"copy_{i}",
+                use_container_width=True,
+            ):
+                st.session_state["copied_index"] = i
 
-            # Enhanced prompt
-            st.code(prompt, language=None)
+        with btn_gpt:
+            st.link_button(
+                "💬  Open in ChatGPT",
+                url=chatgpt_url,
+                use_container_width=True,
+            )
 
-            # Action buttons
-            btn_copy, btn_gpt, btn_claude = st.columns(3)
+        with btn_claude:
+            st.link_button(
+                "🤖  Open in Claude",
+                url=claude_url,
+                use_container_width=True,
+            )
 
-            with btn_copy:
-                if st.button(
-                    "📋  Copy",
-                    key=f"copy_{i}",
-                    use_container_width=True,
-                    help="Reveals a text box below — select all and copy.",
-                ):
-                    st.session_state["copied_index"] = i
-                    st.toast(f"📋  Variant {i + 1} ready to copy below!")
-
-            with btn_gpt:
-                st.link_button(
-                    "💬  Open in ChatGPT",
-                    url=chatgpt_url,
-                    use_container_width=True,
-                )
-
-            with btn_claude:
-                st.link_button(
-                    "🤖  Open in Claude",
-                    url=claude_url,
-                    use_container_width=True,
-                )
-
-            # Copy helper
-            if st.session_state.get("copied_index") == i:
-                st.text_area(
-                    label="Select all (Ctrl+A) then copy (Ctrl+C):",
-                    value=prompt,
-                    height=120,
-                    key=f"copy_area_{i}",
-                )
+        # ── Copy popup ────────────────────────────────────────────────────
+        if st.session_state.get("copied_index") == i:
+            st.markdown(
+                "<div style='"
+                "background:#F0FDF4;"
+                "border:1px solid #86EFAC;"
+                "border-radius:10px;"
+                "padding:16px 20px;"
+                "margin-top:8px;"
+                "'>"
+                "<p style='margin:0 0 8px 0;"
+                "font-weight:700;color:#166534;'>"
+                "📋 How to copy this prompt</p>"
+                "<ol style='margin:0;padding-left:20px;"
+                "color:#166534;line-height:1.8;'>"
+                "<li>Click inside the text box below</li>"
+                "<li>Press <strong>Ctrl+A</strong> to select all</li>"
+                "<li>Press <strong>Ctrl+C</strong> to copy</li>"
+                "<li>Paste anywhere with <strong>Ctrl+V</strong></li>"
+                "</ol>"
+                "<p style='margin:8px 0 0 0;"
+                "font-size:0.82em;color:#16A34A;'>"
+                "💡 On Mac use Cmd instead of Ctrl</p>"
+                "</div>",
+                unsafe_allow_html=True,
+            )
+            st.text_area(
+                label="",
+                value=prompt,
+                height=100,
+                key=f"copy_area_{i}",
+                label_visibility="collapsed",
+            )
 
         st.markdown("<br>", unsafe_allow_html=True)
 

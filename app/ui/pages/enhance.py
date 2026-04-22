@@ -16,6 +16,32 @@ CARD_EMOJIS = ["🟢", "🔵", "🟡", "🟠", "🔴"]
 
 def render() -> None:
 
+    # ── Global font size override ─────────────────────────────────────────────
+    st.markdown(
+        """
+        <style>
+        .main p, .main li, .main label {
+            font-size: 1.05rem;
+            line-height: 1.7;
+        }
+        .main h3 {
+            font-size: 1.1rem;
+            margin-bottom: 4px;
+        }
+        [data-testid="stSidebar"] p,
+        [data-testid="stSidebar"] label {
+            font-size: 0.95rem;
+        }
+        @media (max-width: 768px) {
+            .main p, .main li {
+                font-size: 1rem;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
     # ── Page header ───────────────────────────────────────────────────────────
     st.title("✨ Better Prompt")
     st.markdown(
@@ -193,7 +219,18 @@ def render() -> None:
         chatgpt_url = f"https://chatgpt.com/?q={encoded}"
         claude_url  = f"https://claude.ai/new?q={encoded}"
 
-        with st.container(border=True):
+        st.markdown(
+            "<div style='"
+            "border:2px solid #7C3AED;"
+            "border-radius:12px;"
+            "padding:20px;"
+            "margin-bottom:8px;"
+            "background:#FDFCFF;"
+            "box-shadow:0 2px 8px rgba(124,58,237,0.08);"
+            "'>",
+            unsafe_allow_html=True,
+        )
+        with st.container():
 
             # Title row
             col_title, col_tone = st.columns([4, 1])
@@ -217,8 +254,22 @@ def render() -> None:
             st.markdown(f"*{why_better}*")
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # Enhanced prompt
-            st.code(prompt, language=None)
+            # Enhanced prompt — wrapped for readability
+            st.markdown(
+                f"<div style='"
+                f"background:#f6f8fa;"
+                f"border:1px solid #d0d7de;"
+                f"border-radius:8px;"
+                f"padding:16px;"
+                f"font-family:monospace;"
+                f"font-size:0.9em;"
+                f"line-height:1.6;"
+                f"white-space:pre-wrap;"
+                f"word-wrap:break-word;"
+                f"color:#1F1F1F;"
+                f"'>{prompt}</div>",
+                unsafe_allow_html=True,
+            )
 
             # Action buttons
             btn_copy, btn_gpt, btn_claude = st.columns(3)
@@ -256,6 +307,7 @@ def render() -> None:
                     key=f"copy_area_{i}",
                 )
 
+        st.markdown("</div>", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
 
     # ── Bottom tip ────────────────────────────────────────────────────────────

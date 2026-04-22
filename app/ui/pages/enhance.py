@@ -16,7 +16,7 @@ CARD_EMOJIS = ["🟢", "🔵", "🟡", "🟠", "🔴"]
 
 def render() -> None:
 
-    # ── Global font size override ─────────────────────────────────────────────
+    # ── Global font size + Ctrl+Enter support ────────────────────────────────
     st.markdown(
         """
         <style>
@@ -56,6 +56,8 @@ def render() -> None:
         st.session_state["session_count"] = 0
     if "copied_index" not in st.session_state:
         st.session_state["copied_index"] = None
+    if "enhance_trigger" not in st.session_state:
+        st.session_state["enhance_trigger"] = False
 
     # ── Sidebar extras ────────────────────────────────────────────────────────
     with st.sidebar:
@@ -86,6 +88,7 @@ def render() -> None:
             "·  help me write an email to my boss  ·  what is blockchain  "
             "·  how does the stock market work"
         ),
+        key="main_question",
     )
 
     # ── Optional context and goal ─────────────────────────────────────────────
@@ -148,7 +151,7 @@ def render() -> None:
         st.warning("⚠️  Please enter a question or topic before enhancing.")
         return
 
-    # ── Read API settings from shared session state ───────────────────────────
+    # ── Read API settings ─────────────────────────────────────────────────────
     api_key = st.session_state.get("global_api_key", "")
     model   = st.session_state.get(
         "global_model", "groq/llama-3.3-70b-versatile"
@@ -219,46 +222,32 @@ def render() -> None:
         chatgpt_url = f"https://chatgpt.com/?q={encoded}"
         claude_url  = f"https://claude.ai/new?q={encoded}"
 
-        # ── Card using background colour instead of border ────────────────
+        # ── Card ──────────────────────────────────────────────────────────
         st.markdown(
-            f"""
-            <div style='
-                background:#F5F3FF;
-                border-radius:12px;
-                padding:24px 24px 8px 24px;
-                margin-bottom:16px;
-            '>
-                <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;'>
-                    <span style='font-size:1.2em; font-weight:700;'>{emoji}&nbsp;&nbsp;{name}</span>
-                    <span style='
-                        background:#EDE9FE;
-                        color:#5B21B6;
-                        padding:4px 12px;
-                        border-radius:12px;
-                        font-size:0.78em;
-                        font-weight:600;
-                    '>{tone}</span>
-                </div>
-                <p style='margin:6px 0 2px 0; font-size:0.95em;'>
-                    <strong>Best for:</strong> {best_for}
-                </p>
-                <p style='margin:2px 0 12px 0; font-size:0.9em; font-style:italic; color:#555;'>
-                    {why_better}
-                </p>
-                <div style='
-                    background:#FFFFFF;
-                    border-radius:8px;
-                    padding:16px;
-                    font-family:monospace;
-                    font-size:0.9em;
-                    line-height:1.6;
-                    white-space:pre-wrap;
-                    word-wrap:break-word;
-                    color:#1F1F1F;
-                    margin-bottom:16px;
-                '>{prompt}</div>
-            </div>
-            """,
+            f"<div style='"
+            f"background:#F5F3FF;"
+            f"border-radius:12px;"
+            f"padding:24px 24px 8px 24px;"
+            f"margin-bottom:16px;"
+            f"'>"
+            f"<div style='display:flex;justify-content:space-between;"
+            f"align-items:center;margin-bottom:4px;'>"
+            f"<span style='font-size:1.2em;font-weight:700;'>"
+            f"{emoji}&nbsp;&nbsp;{name}</span>"
+            f"<span style='background:#EDE9FE;color:#5B21B6;"
+            f"padding:4px 12px;border-radius:12px;"
+            f"font-size:0.78em;font-weight:600;'>{tone}</span>"
+            f"</div>"
+            f"<p style='margin:6px 0 2px 0;font-size:0.95em;'>"
+            f"<strong>Best for:</strong> {best_for}</p>"
+            f"<p style='margin:2px 0 12px 0;font-size:0.9em;"
+            f"font-style:italic;color:#555;'>{why_better}</p>"
+            f"<div style='background:#FFFFFF;border-radius:8px;"
+            f"padding:16px;font-family:monospace;font-size:0.9em;"
+            f"line-height:1.6;white-space:pre-wrap;"
+            f"word-wrap:break-word;color:#1F1F1F;"
+            f"margin-bottom:16px;'>{prompt}</div>"
+            f"</div>",
             unsafe_allow_html=True,
         )
 
@@ -287,31 +276,28 @@ def render() -> None:
                 use_container_width=True,
             )
 
-        # ── Copy popup — appears below when Copy is clicked ───────────────
+        # ── Copy popup ────────────────────────────────────────────────────
         if st.session_state.get("copied_index") == i:
             st.markdown(
-                """
-                <div style='
-                    background:#F0FDF4;
-                    border:1px solid #86EFAC;
-                    border-radius:10px;
-                    padding:16px 20px;
-                    margin-top:8px;
-                '>
-                    <p style='margin:0 0 8px 0; font-weight:700; color:#166534;'>
-                        📋 How to copy this prompt
-                    </p>
-                    <ol style='margin:0; padding-left:20px; color:#166534; line-height:1.8;'>
-                        <li>Click inside the text box below</li>
-                        <li>Press <strong>Ctrl+A</strong> to select all</li>
-                        <li>Press <strong>Ctrl+C</strong> to copy</li>
-                        <li>Paste anywhere with <strong>Ctrl+V</strong></li>
-                    </ol>
-                    <p style='margin:8px 0 0 0; font-size:0.82em; color:#4ADE80;'>
-                        💡 On Mac use Cmd instead of Ctrl
-                    </p>
-                </div>
-                """,
+                "<div style='"
+                "background:#F0FDF4;"
+                "border:1px solid #86EFAC;"
+                "border-radius:10px;"
+                "padding:16px 20px;"
+                "margin-top:8px;"
+                "'>"
+                "<p style='margin:0 0 8px 0;font-weight:700;color:#166534;'>"
+                "📋 How to copy this prompt</p>"
+                "<ol style='margin:0;padding-left:20px;"
+                "color:#166534;line-height:1.8;'>"
+                "<li>Click inside the text box below</li>"
+                "<li>Press <strong>Ctrl+A</strong> to select all</li>"
+                "<li>Press <strong>Ctrl+C</strong> to copy</li>"
+                "<li>Paste anywhere with <strong>Ctrl+V</strong></li>"
+                "</ol>"
+                "<p style='margin:8px 0 0 0;font-size:0.82em;color:#16A34A;'>"
+                "💡 On Mac use Cmd instead of Ctrl</p>"
+                "</div>",
                 unsafe_allow_html=True,
             )
             st.text_area(

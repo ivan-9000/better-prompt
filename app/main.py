@@ -26,7 +26,7 @@ def main() -> None:
 
         page = st.radio(
             "Navigate",
-            ["✨ Enhance", "🧪 Evaluate", "📜 History"],
+            ["✨ Enhance", "📜 History"],
             label_visibility="collapsed",
         )
 

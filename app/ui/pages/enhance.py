@@ -219,95 +219,91 @@ def render() -> None:
         chatgpt_url = f"https://chatgpt.com/?q={encoded}"
         claude_url  = f"https://claude.ai/new?q={encoded}"
 
+        # ── Card using background colour instead of border ────────────────
         st.markdown(
-            "<div style='"
-            "border:2px solid #7C3AED;"
-            "border-radius:12px;"
-            "padding:20px;"
-            "margin-bottom:8px;"
-            "background:#FDFCFF;"
-            "box-shadow:0 2px 8px rgba(124,58,237,0.08);"
-            "'>",
+            f"""
+            <div style='
+                background:#F5F3FF;
+                border-radius:12px;
+                padding:24px 24px 8px 24px;
+                margin-bottom:16px;
+            '>
+                <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;'>
+                    <span style='font-size:1.2em; font-weight:700;'>{emoji}&nbsp;&nbsp;{name}</span>
+                    <span style='
+                        background:#EDE9FE;
+                        color:#5B21B6;
+                        padding:4px 12px;
+                        border-radius:12px;
+                        font-size:0.78em;
+                        font-weight:600;
+                    '>{tone}</span>
+                </div>
+                <p style='margin:6px 0 2px 0; font-size:0.95em;'>
+                    <strong>Best for:</strong> {best_for}
+                </p>
+                <p style='margin:2px 0 12px 0; font-size:0.9em; font-style:italic; color:#555;'>
+                    {why_better}
+                </p>
+                <div style='
+                    background:#FFFFFF;
+                    border-radius:8px;
+                    padding:16px;
+                    font-family:monospace;
+                    font-size:0.9em;
+                    line-height:1.6;
+                    white-space:pre-wrap;
+                    word-wrap:break-word;
+                    color:#1F1F1F;
+                    margin-bottom:16px;
+                '>{prompt}</div>
+            </div>
+            """,
             unsafe_allow_html=True,
         )
-        with st.container():
 
-            # Title row
-            col_title, col_tone = st.columns([4, 1])
-            with col_title:
-                st.subheader(f"{emoji}  {name}")
-            with col_tone:
-                st.markdown(
-                    "<br>"
-                    f"<span style='"
-                    f"background:#f0f2f6;"
-                    f"padding:5px 12px;"
-                    f"border-radius:14px;"
-                    f"font-size:0.78em;"
-                    f"color:#444;"
-                    f"'>{tone}</span>",
-                    unsafe_allow_html=True,
-                )
+        # ── Action buttons — outside the HTML div, with spacing ───────────
+        btn_copy, btn_gpt, btn_claude = st.columns(3)
 
-            # Meta info
-            st.markdown(f"**Best for:** {best_for}")
-            st.markdown(f"*{why_better}*")
-            st.markdown("<br>", unsafe_allow_html=True)
+        with btn_copy:
+            if st.button(
+                "📋  Copy prompt",
+                key=f"copy_{i}",
+                use_container_width=True,
+            ):
+                st.session_state["copied_index"] = i
 
-            # Enhanced prompt — wrapped for readability
-            st.markdown(
-                f"<div style='"
-                f"background:#f6f8fa;"
-                f"border:1px solid #d0d7de;"
-                f"border-radius:8px;"
-                f"padding:16px;"
-                f"font-family:monospace;"
-                f"font-size:0.9em;"
-                f"line-height:1.6;"
-                f"white-space:pre-wrap;"
-                f"word-wrap:break-word;"
-                f"color:#1F1F1F;"
-                f"'>{prompt}</div>",
-                unsafe_allow_html=True,
+        with btn_gpt:
+            st.link_button(
+                "💬  Open in ChatGPT",
+                url=chatgpt_url,
+                use_container_width=True,
             )
 
-            # Action buttons
-            btn_copy, btn_gpt, btn_claude = st.columns(3)
+        with btn_claude:
+            st.link_button(
+                "🤖  Open in Claude",
+                url=claude_url,
+                use_container_width=True,
+            )
 
-            with btn_copy:
-                if st.button(
-                    "📋  Copy",
-                    key=f"copy_{i}",
-                    use_container_width=True,
-                    help="Reveals a text box below — select all and copy.",
-                ):
-                    st.session_state["copied_index"] = i
-                    st.toast(f"📋  Variant {i + 1} ready to copy below!")
+        # ── Copy area — appears below buttons when Copy is clicked ────────
+        if st.session_state.get("copied_index") == i:
+            st.markdown(
+                "<p style='font-size:0.85em; color:#666; margin-top:8px;'>"
+                "👇  Click inside the box below, press "
+                "<strong>Ctrl+A</strong> to select all, "
+                "then <strong>Ctrl+C</strong> to copy:</p>",
+                unsafe_allow_html=True,
+            )
+            st.text_area(
+                label="",
+                value=prompt,
+                height=120,
+                key=f"copy_area_{i}",
+                label_visibility="collapsed",
+            )
 
-            with btn_gpt:
-                st.link_button(
-                    "💬  Open in ChatGPT",
-                    url=chatgpt_url,
-                    use_container_width=True,
-                )
-
-            with btn_claude:
-                st.link_button(
-                    "🤖  Open in Claude",
-                    url=claude_url,
-                    use_container_width=True,
-                )
-
-            # Copy helper
-            if st.session_state.get("copied_index") == i:
-                st.text_area(
-                    label="Select all (Ctrl+A) then copy (Ctrl+C):",
-                    value=prompt,
-                    height=120,
-                    key=f"copy_area_{i}",
-                )
-
-        st.markdown("</div>", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
 
     # ── Bottom tip ────────────────────────────────────────────────────────────

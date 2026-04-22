@@ -262,7 +262,7 @@ def render() -> None:
             unsafe_allow_html=True,
         )
 
-        # ── Action buttons — outside the HTML div, with spacing ───────────
+        # ── Action buttons ────────────────────────────────────────────────
         btn_copy, btn_gpt, btn_claude = st.columns(3)
 
         with btn_copy:
@@ -287,19 +287,37 @@ def render() -> None:
                 use_container_width=True,
             )
 
-        # ── Copy area — appears below buttons when Copy is clicked ────────
+        # ── Copy popup — appears below when Copy is clicked ───────────────
         if st.session_state.get("copied_index") == i:
             st.markdown(
-                "<p style='font-size:0.85em; color:#666; margin-top:8px;'>"
-                "👇  Click inside the box below, press "
-                "<strong>Ctrl+A</strong> to select all, "
-                "then <strong>Ctrl+C</strong> to copy:</p>",
+                """
+                <div style='
+                    background:#F0FDF4;
+                    border:1px solid #86EFAC;
+                    border-radius:10px;
+                    padding:16px 20px;
+                    margin-top:8px;
+                '>
+                    <p style='margin:0 0 8px 0; font-weight:700; color:#166534;'>
+                        📋 How to copy this prompt
+                    </p>
+                    <ol style='margin:0; padding-left:20px; color:#166534; line-height:1.8;'>
+                        <li>Click inside the text box below</li>
+                        <li>Press <strong>Ctrl+A</strong> to select all</li>
+                        <li>Press <strong>Ctrl+C</strong> to copy</li>
+                        <li>Paste anywhere with <strong>Ctrl+V</strong></li>
+                    </ol>
+                    <p style='margin:8px 0 0 0; font-size:0.82em; color:#4ADE80;'>
+                        💡 On Mac use Cmd instead of Ctrl
+                    </p>
+                </div>
+                """,
                 unsafe_allow_html=True,
             )
             st.text_area(
                 label="",
                 value=prompt,
-                height=120,
+                height=100,
                 key=f"copy_area_{i}",
                 label_visibility="collapsed",
             )
